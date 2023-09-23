@@ -1,0 +1,85 @@
+---
+- name: Configuraciones para instalar la appWeb
+  gather_facts: false
+  hosts: all
+  become: true
+  tasks:
+    - name: Actualizar el repositorio y la caché de apt-get 
+      apt:  
+        update_cache=yes 
+        force_apt_get=yes 
+        cache_valid_time=3600
+
+    - name: Intalar lista de paquetes
+      apt:
+        name: 
+          - apache2
+          - php
+          - mysql-server
+          - php-mysql
+          - python3-pymsql
+        state: present
+      become: yes
+
+    - name: Clonar LoginMIO del repositorio 
+      git:
+        repo:'https://github.com/ualmtorres/diariostic.git'
+        dest: /var/www/html/web-LoginMIO
+        become: yes
+    
+    - name: Change port to 8080 in /etc/apache2/ports.conf
+      lineinfile:
+        path: /etc/apache2/ports.conf
+        regexp: '^Listen 80'
+        line: 'Listen 8080'
+
+    - name: Change port to 8080 in /etc/apache2/site-enabled/000-default.conf
+      lineinfile:
+        path: /etc/apache2/sites-enabled/000-default.conf
+        regexp: '^<VirtualHost \*:80>'
+        line: '<VirtualHost *:8080>'
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
+
+   - name: Establecer contraseña del usuario de la base de datos
+     mysql_user:
+       name: root
+       password: " "
+     become: yes
+
+   - name: Crear la base de datos
+     mysql_db:
+       name: login
+       state: present
+     become: yes 
+
+   - name: Cargar el esquema en la base de datos
+     mysql_db:
+        name: login
+        state: import
+     target: /var/www/html/web-LoginMIO/login_bd.sql 
+     become: yes
+
+   - name: Eliminar cuentas anónimas y base de datos de prueba
+     mysql_db:
+        name: test
+        state: absent
+     become: yes
+
+   - name: Configurar firewall para permitir tráfico HTTP
+     ufw:
+      rule: allow
+      port: 8080
+     become: yes
+
+   - name: Reiniciar el servicio Apache
+      service:
+        name: apache2
+        state: restarted
+     become: yes
+
+    - name: Establecer la aplicación web
+      command: php /var/www/html/web-LoginMIO/index.php 
+      become: yes
